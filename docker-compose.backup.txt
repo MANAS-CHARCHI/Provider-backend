@@ -1,0 +1,64 @@
+version: "3.9"
+
+x-backend_base: &backend_base
+  image: fastapi-backend
+  build:
+    context: ./backend
+  env_file: .env
+  volumes:
+    - ./backend:/usr/src/app/
+  depends_on:
+    - db
+    - redis
+  restart: always
+
+services:
+  db:
+    container_name: database
+    image: postgres:16
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    env_file:
+      - .env
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    <<: *backend_base
+    container_name: backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8001:8000"
+
+  celery_worker:
+    <<: *backend_base
+    container_name: celery_worker
+    command: celery -A main.celery_app worker --loglevel=info
+
+  celery_beat:
+    <<: *backend_base
+    container_name: celery_beat
+    command: celery -A main.celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
